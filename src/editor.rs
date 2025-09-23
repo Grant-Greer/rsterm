@@ -16,7 +16,7 @@ impl Editor {
                     println!("{:?} \r", event);
                     match event.code {
                         Char(c) => {
-                            if c = 'q' {
+                            if c == 'q' {
                                 break;
                             }
                         }
