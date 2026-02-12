@@ -1,4 +1,4 @@
-use super::terminal::{Position, Size, Terminal};
+use super::terminal::{Size, Terminal};
 use std::io::Error;
 mod buffer;
 use buffer::Buffer;
@@ -12,7 +12,22 @@ pub struct View {
     size: Size,
 }
 
+impl Default for View {
+    fn default() -> Self {
+        Self {
+            buffer: Buffer::default(),
+            needs_redraw: true,
+            size: Size::default(),
+        }
+    }
+}
+
 impl View {
+    pub fn resize(&mut self, size: Size) {
+        self.size = size;
+        self.needs_redraw = true;
+    }
+
     pub fn render(&self) -> Result<(), Error> {
         let Size { height, .. } = Terminal::size()?;
 

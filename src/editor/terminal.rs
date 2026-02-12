@@ -1,6 +1,9 @@
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::style::Print;
-use crossterm::terminal::{Clear, ClearType, disable_raw_mode, enable_raw_mode, size};
+use crossterm::terminal::{
+    Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode,
+    enable_raw_mode, size,
+};
 use crossterm::{Command, queue};
 use std::io::{Error, Write, stdout};
 
@@ -16,20 +19,19 @@ pub struct Position {
     pub row: usize,
 }
 
+/// Manages terminal state including raw mode and alternate screen.
+/// Implements `Drop` to ensure cleanup even on unexpected exits.
 pub struct Terminal;
 
 impl Terminal {
-    pub fn terminate() -> Result<(), Error> {
-        Self::execute()?;
-        disable_raw_mode()?;
-        Ok(())
-    }
-
-    pub fn initialize() -> Result<(), Error> {
+    /// Creates a new Terminal, entering raw mode and the alternate screen.
+    /// Use this instead of `Default` since initialization has side effects.
+    pub fn new() -> Result<Self, Error> {
         enable_raw_mode()?;
+        Self::enter_alternate_screen()?;
         Self::clear_screen()?;
         Self::execute()?;
-        Ok(())
+        Ok(Self)
     }
 
     pub fn clear_screen() -> Result<(), Error> {
@@ -43,6 +45,16 @@ impl Terminal {
     }
 
     pub fn move_caret_to(position: Position) -> Result<(), Error> {
+        debug_assert!(
+            u16::try_from(position.col).is_ok(),
+            "Column position {col} exceeds u16::MAX",
+            col = position.col
+        );
+        debug_assert!(
+            u16::try_from(position.row).is_ok(),
+            "Row position {row} exceeds u16::MAX",
+            row = position.row
+        );
         #[allow(clippy::as_conversions, clippy::cast_possible_truncation)]
         Self::queue_command(MoveTo(position.col as u16, position.row as u16))?;
         Ok(())
@@ -79,8 +91,29 @@ impl Terminal {
         Ok(())
     }
 
+    fn enter_alternate_screen() -> Result<(), Error> {
+        Self::queue_command(EnterAlternateScreen)?;
+        Ok(())
+    }
+
+    fn leave_alternate_screen() -> Result<(), Error> {
+        Self::queue_command(LeaveAlternateScreen)?;
+        Ok(())
+    }
+
     fn queue_command<T: Command>(command: T) -> Result<(), Error> {
         queue!(stdout(), command)?;
         Ok(())
+    }
+}
+
+impl Drop for Terminal {
+    fn drop(&mut self) {
+        // Best-effort cleanup. Each step is independent so we attempt all of them
+        // even if earlier ones fail. We must not panic here.
+        let _ = Self::leave_alternate_screen();
+        let _ = Self::show_caret();
+        let _ = Self::execute();
+        let _ = disable_raw_mode();
     }
 }
