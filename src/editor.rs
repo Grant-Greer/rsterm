@@ -1,7 +1,6 @@
 use core::cmp::min;
 use crossterm::event::{
-    Event::{self, Key},
-    KeyCode, KeyEvent, KeyEventKind, KeyModifiers, read,
+    Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers, read,
 };
 
 use std::io::Error;
@@ -17,19 +16,33 @@ struct Location {
     y: usize,
 }
 
-#[derive(Default)]
 pub struct Editor {
     should_quit: bool,
     location: Location,
     view: View,
+    _terminal: Terminal,
 }
 
 impl Editor {
+    /// Creates a new Editor, initializing the terminal (raw mode + alternate screen).
+    /// Returns an error if terminal initialization fails.
+    pub fn new() -> Result<Self, Error> {
+        let terminal = Terminal::new()?;
+        Ok(Self {
+            should_quit: false,
+            location: Location::default(),
+            view: View::default(),
+            _terminal: terminal,
+        })
+    }
+
     pub fn run(&mut self) {
-        Terminal::initialize().unwrap();
         let result = self.repl();
-        Terminal::terminate().unwrap();
-        result.unwrap();
+        if let Err(err) = result {
+            // In debug builds, panic so the error is visible during development.
+            // In release builds, silently continue — Drop will clean up the terminal.
+            debug_assert!(false, "Error in editor main loop: {err}");
+        }
     }
 
     fn repl(&mut self) -> Result<(), Error> {
@@ -39,13 +52,18 @@ impl Editor {
                 break;
             }
             let event = read()?;
-            self.evaluate_event(event)?;
+            self.evaluate_event(event);
         }
         Ok(())
     }
-    fn move_point(&mut self, key_code: KeyCode) -> Result<(), Error> {
+
+    fn move_point(&mut self, key_code: KeyCode) {
         let Location { mut x, mut y } = self.location;
-        let Size { height, width } = Terminal::size()?;
+        // Handle Terminal::size() locally: if we can't read the terminal size,
+        // we simply skip the movement rather than propagating the error.
+        let Ok(Size { height, width }) = Terminal::size() else {
+            return;
+        };
         match key_code {
             KeyCode::Up => {
                 y = y.saturating_sub(1);
@@ -74,10 +92,10 @@ impl Editor {
             _ => (),
         }
         self.location = Location { x, y };
-        Ok(())
     }
+
     #[allow(clippy::needless_pass_by_value)]
-    fn evaluate_event(&mut self, event: Event) -> Result<(), Error> {
+    fn evaluate_event(&mut self, event: Event) {
         match event {
             Event::Key(KeyEvent {
                 code,
@@ -99,7 +117,7 @@ impl Editor {
                     | KeyCode::Home,
                     _,
                 ) => {
-                    self.move_point(code)?;
+                    self.move_point(code);
                 }
                 _ => {}
             },
@@ -113,8 +131,8 @@ impl Editor {
             }
             _ => {}
         }
-        Ok(())
     }
+
     fn refresh_screen(&mut self) -> Result<(), Error> {
         Terminal::hide_caret()?;
         Terminal::move_caret_to(Position::default())?;
