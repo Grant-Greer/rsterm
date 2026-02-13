@@ -58,12 +58,17 @@ impl Editor {
     }
 
     fn move_point(&mut self, key_code: KeyCode) {
-        let Location { mut x, mut y } = self.location;
         // Handle Terminal::size() locally: if we can't read the terminal size,
         // we simply skip the movement rather than propagating the error.
-        let Ok(Size { height, width }) = Terminal::size() else {
+        let Ok(size) = Terminal::size() else {
             return;
         };
+        self.location = Self::calculate_movement(self.location, key_code, size);
+    }
+
+    fn calculate_movement(location: Location, key_code: KeyCode, size: Size) -> Location {
+        let Location { mut x, mut y } = location;
+        let Size { height, width } = size;
         match key_code {
             KeyCode::Up => {
                 y = y.saturating_sub(1);
@@ -91,7 +96,7 @@ impl Editor {
             }
             _ => (),
         }
-        self.location = Location { x, y };
+        Location { x, y }
     }
 
     #[allow(clippy::needless_pass_by_value)]
@@ -150,5 +155,117 @@ impl Editor {
         Terminal::show_caret()?;
         Terminal::execute()?;
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TEST_SIZE: Size = Size {
+        height: 24,
+        width: 80,
+    };
+
+    fn loc(x: usize, y: usize) -> Location {
+        Location { x, y }
+    }
+
+    #[test]
+    fn move_up_from_origin_stays_at_zero() {
+        let result = Editor::calculate_movement(loc(0, 0), KeyCode::Up, TEST_SIZE);
+        assert_eq!(result.y, 0);
+    }
+
+    #[test]
+    fn move_up_decrements_y() {
+        let result = Editor::calculate_movement(loc(5, 10), KeyCode::Up, TEST_SIZE);
+        assert_eq!(result.y, 9);
+        assert_eq!(result.x, 5);
+    }
+
+    #[test]
+    fn move_down_increments_y() {
+        let result = Editor::calculate_movement(loc(5, 10), KeyCode::Down, TEST_SIZE);
+        assert_eq!(result.y, 11);
+        assert_eq!(result.x, 5);
+    }
+
+    #[test]
+    fn move_down_clamps_to_bottom() {
+        let result = Editor::calculate_movement(loc(0, 23), KeyCode::Down, TEST_SIZE);
+        assert_eq!(result.y, 23);
+    }
+
+    #[test]
+    fn move_left_from_origin_stays_at_zero() {
+        let result = Editor::calculate_movement(loc(0, 0), KeyCode::Left, TEST_SIZE);
+        assert_eq!(result.x, 0);
+    }
+
+    #[test]
+    fn move_left_decrements_x() {
+        let result = Editor::calculate_movement(loc(5, 0), KeyCode::Left, TEST_SIZE);
+        assert_eq!(result.x, 4);
+    }
+
+    #[test]
+    fn move_right_increments_x() {
+        let result = Editor::calculate_movement(loc(5, 0), KeyCode::Right, TEST_SIZE);
+        assert_eq!(result.x, 6);
+    }
+
+    #[test]
+    fn move_right_clamps_to_width() {
+        let result = Editor::calculate_movement(loc(79, 0), KeyCode::Right, TEST_SIZE);
+        assert_eq!(result.x, 79);
+    }
+
+    #[test]
+    fn page_up_jumps_to_top() {
+        let result = Editor::calculate_movement(loc(5, 15), KeyCode::PageUp, TEST_SIZE);
+        assert_eq!(result.y, 0);
+        assert_eq!(result.x, 5);
+    }
+
+    #[test]
+    fn page_down_jumps_to_bottom() {
+        let result = Editor::calculate_movement(loc(5, 0), KeyCode::PageDown, TEST_SIZE);
+        assert_eq!(result.y, 23);
+        assert_eq!(result.x, 5);
+    }
+
+    #[test]
+    fn home_jumps_to_start_of_line() {
+        let result = Editor::calculate_movement(loc(40, 10), KeyCode::Home, TEST_SIZE);
+        assert_eq!(result.x, 0);
+        assert_eq!(result.y, 10);
+    }
+
+    #[test]
+    fn end_jumps_to_end_of_line() {
+        let result = Editor::calculate_movement(loc(0, 10), KeyCode::End, TEST_SIZE);
+        assert_eq!(result.x, 79);
+        assert_eq!(result.y, 10);
+    }
+
+    #[test]
+    fn unhandled_key_does_not_move() {
+        let result =
+            Editor::calculate_movement(loc(5, 10), KeyCode::Char('a'), TEST_SIZE);
+        assert_eq!(result.x, 5);
+        assert_eq!(result.y, 10);
+    }
+
+    #[test]
+    fn movement_with_zero_size_terminal() {
+        let zero_size = Size {
+            height: 0,
+            width: 0,
+        };
+        let result = Editor::calculate_movement(loc(0, 0), KeyCode::Down, zero_size);
+        assert_eq!(result.y, 0);
+        let result = Editor::calculate_movement(loc(0, 0), KeyCode::Right, zero_size);
+        assert_eq!(result.x, 0);
     }
 }

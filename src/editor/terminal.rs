@@ -107,6 +107,59 @@ impl Terminal {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn size_default_is_zero() {
+        let size = Size::default();
+        assert_eq!(size.height, 0);
+        assert_eq!(size.width, 0);
+    }
+
+    #[test]
+    fn position_default_is_zero() {
+        let pos = Position::default();
+        assert_eq!(pos.col, 0);
+        assert_eq!(pos.row, 0);
+    }
+
+    #[test]
+    fn size_stores_values() {
+        let size = Size {
+            height: 24,
+            width: 80,
+        };
+        assert_eq!(size.height, 24);
+        assert_eq!(size.width, 80);
+    }
+
+    #[test]
+    fn position_stores_values() {
+        let pos = Position { col: 10, row: 5 };
+        assert_eq!(pos.col, 10);
+        assert_eq!(pos.row, 5);
+    }
+
+    #[test]
+    fn size_is_copy() {
+        let size = Size {
+            height: 24,
+            width: 80,
+        };
+        let size2 = size;
+        assert_eq!(size.height, size2.height);
+    }
+
+    #[test]
+    fn position_is_copy() {
+        let pos = Position { col: 10, row: 5 };
+        let pos2 = pos;
+        assert_eq!(pos.col, pos2.col);
+    }
+}
+
 impl Drop for Terminal {
     fn drop(&mut self) {
         // Best-effort cleanup. Each step is independent so we attempt all of them
